@@ -1,0 +1,25 @@
+[package]
+name = "backup-monitor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { version = "1.0.89", features = ["backtrace"] }
+arc-swap = "1.7.1"
+auto-launch = "0.5.0"
+chrono = { version = "0.4.38", default-features = false, features = [
+    "clock",
+    "now",
+    "serde",
+] }
+dirs = "5.0.1"
+env_logger = "0.11.5"
+humantime = "2.1.0"
+humantime-serde = "1.1.1"
+ksni = "0.2.2"
+log = "0.4.22"
+mio = { version = "1.0.2", features = ["os-ext", "os-poll"] }
+notify = { version = "6.1.1", default-features = false }
+notify-rust = "4.11.3"
+serde = { version = "1.0.210", features = ["derive"] }
+serde_yaml_ng = "0.10.0"
