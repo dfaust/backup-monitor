@@ -1,7 +1,8 @@
+use std::os::unix::fs::PermissionsExt;
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io,
+    io::{self, Write},
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
@@ -11,6 +12,7 @@ use std::{
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Duration, Utc};
 use notify_rust::{Hint, Notification, Timeout};
+use tempfile::NamedTempFile;
 
 use crate::{
     settings::{Script, Settings},
@@ -122,7 +124,7 @@ impl Manager {
                 || (script_name.is_none() && next_backup(script) <= Utc::now())
             {
                 if is_mounted(&script.backup_path)? {
-                    log::info!("running backup script `{}`", script.script_path.display());
+                    log::info!("running backup script `{}`", script.name);
 
                     self.states
                         .insert(script.name.clone(), ScriptState::Running);
@@ -140,12 +142,20 @@ impl Manager {
                         tray.set_tooltip(self.tooltip());
                     });
 
+                    let mut tmp = NamedTempFile::new()?;
+                    tmp.write_all(script.backup_script.as_bytes())?;
+
+                    let metadata = tmp.as_file().metadata()?;
+                    let mut permissions = metadata.permissions();
+                    permissions.set_mode(0o700);
+                    tmp.as_file().set_permissions(permissions)?;
+
                     let start = Instant::now();
 
                     let state;
                     let summary;
                     let body;
-                    match Command::new(&script.script_path).status() {
+                    match Command::new(tmp.path()).status() {
                         Ok(status) => {
                             if status.success() {
                                 let (run_duration, _) = round_duration(

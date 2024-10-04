@@ -325,6 +325,7 @@ dependencies = [
  "notify-rust",
  "serde",
  "serde_yaml_ng",
+ "tempfile",
 ]
 
 [[package]]

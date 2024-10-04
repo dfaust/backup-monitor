@@ -11,7 +11,7 @@ pub struct Script {
 
     pub icon_name: Option<String>,
 
-    pub script_path: PathBuf,
+    pub backup_script: String,
 
     pub backup_path: PathBuf,
 
