@@ -92,6 +92,15 @@ impl Manager {
             .min()
     }
 
+    pub fn has_blocked(&self) -> bool {
+        let settings = self.settings.load();
+
+        settings
+            .scripts
+            .iter()
+            .any(|script| matches!(self.script_state(script), ScriptState::WaitingForPath(_)))
+    }
+
     pub fn tooltip(&self) -> String {
         let mut items = Vec::new();
 

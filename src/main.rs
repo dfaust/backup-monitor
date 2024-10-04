@@ -210,9 +210,11 @@ fn main() -> anyhow::Result<()> {
                 manager.run(Some(&name), &handle)?;
             }
             _ => {
-                log::info!("running scripts");
+                if next_backup == next_wakeup || manager.has_blocked() {
+                    log::info!("running scripts");
 
-                manager.run(None, &handle)?;
+                    manager.run(None, &handle)?;
+                }
             }
         }
     }
