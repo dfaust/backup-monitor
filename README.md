@@ -1,5 +1,9 @@
 # Backup Monitor
 
+<p align="center">
+    <img src="screenshot.png" alt="Screenshot of Backup Monitor" width="500" align="center" />
+</p>
+
 ## About
 
 Backup Monitor is a lightweight tool designed for expert users who need full control over their backup processes. It runs customizable backup scripts according to a user-defined schedule and monitors the status of backup devices. If a device is not mounted, the app waits until it is, ensuring backups only run when the system is ready. A system tray icon provides real-time status updates, showing the next scheduled backup or indicating if a backup is overdue. With its minimal interface and robust functionality, Backup Monitor ensures your backups are timely and reliable without the need for constant oversight.
