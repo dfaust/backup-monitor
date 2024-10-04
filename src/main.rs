@@ -38,7 +38,9 @@ enum Event {
 }
 
 fn main() -> anyhow::Result<()> {
-    env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("debug"))
+        .format_timestamp(None)
+        .init();
 
     let settings = Settings::load()?;
 
@@ -61,11 +63,12 @@ fn main() -> anyhow::Result<()> {
     let mut watcher =
         notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| match res {
             Ok(event) => {
-                log::debug!("fs event: {event:?}");
                 if matches!(
                     event.kind,
                     notify::event::EventKind::Modify(notify::event::ModifyKind::Data(_))
                 ) {
+                    log::debug!("settings have changed");
+
                     let _ = tx_settings.send(Event::SettingsChanged);
                 }
             }
@@ -78,9 +81,8 @@ fn main() -> anyhow::Result<()> {
     // autostart
     let current_exe = current_exe()?;
     let autolaunch = AutoLaunchBuilder::new()
-        .set_app_name("Backup Monitor")
+        .set_app_name("backup-monitor")
         .set_app_path(&current_exe.display().to_string())
-        .set_use_launch_agent(true)
         .build()?;
 
     let settings = Arc::new(ArcSwap::from_pointee(settings));
@@ -176,7 +178,7 @@ fn main() -> anyhow::Result<()> {
                 let now = Utc::now();
                 let deadline = deadline.max(now);
                 let timeout = (deadline - now).to_std()?;
-                log::debug!(
+                log::trace!(
                     "waiting until {} ({})",
                     deadline.with_timezone(&Local),
                     humantime::format_duration(timeout)
@@ -188,7 +190,7 @@ fn main() -> anyhow::Result<()> {
                 }
             }
             None => {
-                log::debug!("waiting");
+                log::trace!("waiting");
                 match rx.recv() {
                     Ok(event) => Some(event),
                     Err(error) => bail!(error),
@@ -233,7 +235,7 @@ fn poll_mounts(file: File, tx: Sender<Event>) -> io::Result<()> {
     loop {
         poll.poll(&mut events, None)?;
 
-        log::debug!("mounts were updated");
+        log::debug!("mounts have changed");
 
         let _ = tx.send(Event::MountDetected);
     }
