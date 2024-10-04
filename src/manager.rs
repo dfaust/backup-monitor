@@ -43,7 +43,12 @@ impl Manager {
 
     fn script_state(&self, script: &Script) -> ScriptState {
         match self.states.get(&script.name) {
-            Some(ScriptState::WaitingForPath(path)) if *path != script.backup_path => {
+            Some(ScriptState::WaitingForPath(path))
+                if script
+                    .backup_path
+                    .as_ref()
+                    .map_or(true, |backup_path| path != backup_path) =>
+            {
                 ScriptState::WaitingForTime
             }
             Some(state) => state.clone(),
@@ -123,7 +128,7 @@ impl Manager {
             if script_name.is_some_and(|name| name == script.name)
                 || (script_name.is_none() && next_backup(script) <= Utc::now())
             {
-                if is_mounted(&script.backup_path)? {
+                if script.backup_path.as_ref().map_or(Ok(true), is_mounted)? {
                     log::info!("running backup script `{}`", script.name);
 
                     self.states
@@ -206,11 +211,14 @@ impl Manager {
                     notification_handle.timeout(Timeout::Milliseconds(6_000));
                     notification_handle.update();
                 } else {
-                    log::debug!("waiting for `{}` to appear", script.backup_path.display());
+                    log::debug!(
+                        "waiting for `{}` to appear",
+                        script.backup_path.as_ref().unwrap().display()
+                    );
 
                     self.states.insert(
                         script.name.clone(),
-                        ScriptState::WaitingForPath(script.backup_path.clone()),
+                        ScriptState::WaitingForPath(script.backup_path.as_ref().unwrap().clone()),
                     );
                 }
             }
@@ -339,11 +347,8 @@ fn tooltip(script: &Script, state: &ScriptState) -> String {
                 humantime::format_duration(next_backup.to_std().unwrap())
             )
         }
-        ScriptState::WaitingForPath(_) => {
-            format!(
-                "Waiting for backup folder \"{}\" to appear",
-                script.backup_path.display()
-            )
+        ScriptState::WaitingForPath(path) => {
+            format!("Waiting for backup folder \"{}\" to appear", path.display())
         }
         ScriptState::Running => "Running".to_string(),
         ScriptState::Failed(_, message) => format!("Failed: {message}",),
@@ -352,7 +357,9 @@ fn tooltip(script: &Script, state: &ScriptState) -> String {
     format!("{last_backup}\n{status}")
 }
 
-fn is_mounted(path: &Path) -> io::Result<bool> {
+fn is_mounted(path: impl AsRef<Path>) -> io::Result<bool> {
+    let path = path.as_ref();
+
     log::debug!("checking if `{}` exists and is writable", path.display());
 
     if path.exists() {

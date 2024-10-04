@@ -13,7 +13,7 @@ pub struct Script {
 
     pub backup_script: String,
 
-    pub backup_path: PathBuf,
+    pub backup_path: Option<PathBuf>,
 
     #[serde(default, with = "humantime_serde")]
     pub interval: Duration,
