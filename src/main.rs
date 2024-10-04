@@ -209,12 +209,11 @@ fn main() -> anyhow::Result<()> {
 
                 manager.run(Some(&name), &handle)?;
             }
-            _ if next_backup == next_wakeup => {
+            _ => {
                 log::info!("running scripts");
 
                 manager.run(None, &handle)?;
             }
-            _ => {}
         }
     }
 }
