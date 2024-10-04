@@ -231,6 +231,8 @@ fn poll_mounts(file: File, tx: Sender<Event>) -> io::Result<()> {
     loop {
         poll.poll(&mut events, None)?;
 
+        log::debug!("mounts were updated");
+
         let _ = tx.send(Event::MountDetected);
     }
 }

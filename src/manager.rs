@@ -136,7 +136,7 @@ impl Manager {
 
                     let mut notification_handle = Notification::new()
                         .appname(&settings.title)
-                        .summary(&format!("Starting {}", script.name))
+                        .summary(&format!("Running {}", script.name))
                         .icon(&settings.icon_name)
                         .hint(Hint::Resident(true))
                         .timeout(Timeout::Never)
