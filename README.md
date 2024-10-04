@@ -53,7 +53,7 @@ scripts:
 - name: Backup
   backup-script: |
     #!/usr/bin/env bash
-    
+    set -o errexit
     rsync -ah --delete $HOME/ /mnt/backup/home/
   backup-path: /mnt/backup
   interval: 1day
@@ -68,7 +68,7 @@ scripts:
 - name: Home Backup
   backup-script: |
     #!/usr/bin/env bash
-    
+    set -o errexit
     rsync -ah --delete $HOME/ /mnt/backup/home/
   backup-path: /mnt/backup
   interval: 1day
@@ -76,10 +76,18 @@ scripts:
 - name: System Backup
   backup-script: |
     #!/usr/bin/env bash
-    
+    set -o errexit
     rsync -ah --delete /etc/ /mnt/backup/system/
   backup-path: /mnt/backup
   interval: 1day
   reminder: 7days
 autostart: false
 ```
+
+## Usage
+
+Run `backup-monitor`, then right-click the tray icon and select `Settings`.
+
+Edit the config file and save it.
+
+In order to increase logging, set the environment variable `RUST_LOG` to `trace`.
