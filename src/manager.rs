@@ -262,7 +262,7 @@ fn round_duration(
             _ => (0, secs, nanos),
         }
     } else {
-        let secs = duration.num_seconds();
+        let secs = 0;
         let nanos = duration.subsec_nanos();
         match direction {
             RoundDirection::Up if nanos > 0 => (0, secs, 1_000_000_000 - nanos),
@@ -382,7 +382,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_round_duration() {
+    fn round_to_minutes() {
         fn duration(s: &str) -> Duration {
             Duration::from_std(humantime::parse_duration(s).unwrap()).unwrap()
         }
@@ -511,6 +511,139 @@ mod tests {
                 RoundDirection::Down
             ),
             (Duration::zero(), duration("34s 94us"))
+        );
+    }
+
+    #[test]
+    fn round_to_seconds() {
+        fn duration(s: &str) -> Duration {
+            Duration::from_std(humantime::parse_duration(s).unwrap()).unwrap()
+        }
+
+        assert_eq!(
+            round_duration(duration("1d"), RoundAccuracy::Seconds, RoundDirection::Down),
+            (duration("1d"), Duration::zero())
+        );
+        assert_eq!(
+            round_duration(duration("1h"), RoundAccuracy::Seconds, RoundDirection::Down),
+            (duration("1h"), Duration::zero())
+        );
+        assert_eq!(
+            round_duration(duration("1m"), RoundAccuracy::Seconds, RoundDirection::Down),
+            (duration("1m"), Duration::zero())
+        );
+        assert_eq!(
+            round_duration(duration("1s"), RoundAccuracy::Seconds, RoundDirection::Down),
+            (duration("1s"), Duration::zero())
+        );
+
+        assert_eq!(
+            round_duration(
+                duration("1d 17h"),
+                RoundAccuracy::Seconds,
+                RoundDirection::Down
+            ),
+            (duration("1d 17h"), Duration::zero())
+        );
+        assert_eq!(
+            round_duration(
+                duration("2h 59m"),
+                RoundAccuracy::Seconds,
+                RoundDirection::Down
+            ),
+            (duration("2h 59m"), Duration::zero())
+        );
+
+        assert_eq!(
+            round_duration(
+                duration("1d 17h 9m"),
+                RoundAccuracy::Seconds,
+                RoundDirection::Down
+            ),
+            (duration("1d 17h"), duration("9m"))
+        );
+        assert_eq!(
+            round_duration(
+                duration("1d 9m"),
+                RoundAccuracy::Seconds,
+                RoundDirection::Down
+            ),
+            (duration("1d"), duration("9m"))
+        );
+        assert_eq!(
+            round_duration(
+                duration("1d 9m 389ms"),
+                RoundAccuracy::Seconds,
+                RoundDirection::Down
+            ),
+            (duration("1d"), duration("9m 389ms"))
+        );
+
+        assert_eq!(
+            round_duration(
+                duration("5h 9m 17s"),
+                RoundAccuracy::Seconds,
+                RoundDirection::Down
+            ),
+            (duration("5h 9m"), duration("17s"))
+        );
+        assert_eq!(
+            round_duration(
+                duration("5h 17s"),
+                RoundAccuracy::Seconds,
+                RoundDirection::Down
+            ),
+            (duration("5h"), duration("17s"))
+        );
+        assert_eq!(
+            round_duration(
+                duration("5h 17s 389us"),
+                RoundAccuracy::Seconds,
+                RoundDirection::Down
+            ),
+            (duration("5h"), duration("17s 389us"))
+        );
+
+        assert_eq!(
+            round_duration(
+                duration("29m 8s 28ms"),
+                RoundAccuracy::Seconds,
+                RoundDirection::Down
+            ),
+            (duration("29m 8s"), duration("28ms"))
+        );
+        assert_eq!(
+            round_duration(
+                duration("15m 16s"),
+                RoundAccuracy::Seconds,
+                RoundDirection::Down
+            ),
+            (duration("15m 16s"), Duration::zero())
+        );
+        assert_eq!(
+            round_duration(
+                duration("29m 28ms"),
+                RoundAccuracy::Seconds,
+                RoundDirection::Down
+            ),
+            (duration("29m"), duration("28ms"))
+        );
+
+        assert_eq!(
+            round_duration(
+                duration("34s 127ms"),
+                RoundAccuracy::Seconds,
+                RoundDirection::Down
+            ),
+            (duration("34s"), duration("127ms"))
+        );
+        assert_eq!(
+            round_duration(
+                duration("34s 94us"),
+                RoundAccuracy::Seconds,
+                RoundDirection::Down
+            ),
+            (duration("34s"), duration("94us"))
         );
     }
 }
