@@ -42,6 +42,10 @@ The configuration file is located at `~/.config/backup-monitor.yaml`.
 
 - `reminder` (optional): Duration after which a backup is considered overdue. Backup Monitor will remind the user in that case to run the backup.
 
+- `post-backup-actions` (optional): A list of actions the user may choose to execute after the backup script finished.
+
+  Each post backup action consists of a `label` and a `script`.
+
 - `last-backup` (internal): Used internally by Backup Monitor to track when the last successful backup was run.
 
 ### Examples
@@ -58,6 +62,12 @@ scripts:
   backup-path: /mnt/backup
   interval: 1day
   reminder: 7days
+  post-backup-actions:
+  - label: Unmount backup HDD
+    script: |
+      #!/usr/bin/env bash
+      set -o errexit
+      umount /mnt/backup
 autostart: false
 ```
 

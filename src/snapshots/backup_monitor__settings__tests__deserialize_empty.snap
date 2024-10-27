@@ -1,0 +1,8 @@
+---
+source: src/settings.rs
+expression: settings
+---
+icon-name: backup
+title: Backup
+scripts: []
+autostart: false

@@ -156,13 +156,7 @@ impl Manager {
                         tray.set_tooltip(self.tooltip());
                     });
 
-                    let mut tmp = NamedTempFile::new()?;
-                    tmp.write_all(script.backup_script.as_bytes())?;
-
-                    let metadata = tmp.as_file().metadata()?;
-                    let mut permissions = metadata.permissions();
-                    permissions.set_mode(0o700);
-                    tmp.as_file().set_permissions(permissions)?;
+                    let tmp = write_script(&script.backup_script)?;
 
                     let start = Instant::now();
 
@@ -215,10 +209,51 @@ impl Manager {
 
                     self.states.insert(script.name.clone(), state);
 
+                    for action in &script.post_backup_actions {
+                        notification_handle.action(&action.label, &action.label);
+                    }
                     notification_handle.summary(&summary);
                     notification_handle.body(&body);
                     notification_handle.timeout(Timeout::Milliseconds(6_000));
                     notification_handle.update();
+                    notification_handle.wait_for_action(|action_label| {
+                        if let Some(action) = script
+                            .post_backup_actions
+                            .iter()
+                            .find(|action| action.label == action_label)
+                        {
+                            log::info!("running post backup script `{}`", action.label);
+
+                            let tmp = write_script(&action.script).unwrap();
+
+                            let summary;
+                            let body;
+                            match Command::new(tmp.path()).status() {
+                                Ok(status) => {
+                                    if status.success() {
+                                        summary = format!("{} finished", action.label);
+                                        body = String::new();
+                                    } else {
+                                        summary = format!("{} failed", action.label);
+                                        body = String::new();
+                                    }
+                                }
+                                Err(error) => {
+                                    summary = format!("{} failed with error", action.label);
+                                    body = error.to_string();
+                                }
+                            };
+
+                            Notification::new()
+                                .appname(&settings.title)
+                                .summary(&summary)
+                                .body(&body)
+                                .icon(&settings.icon_name)
+                                .timeout(Timeout::Milliseconds(6_000))
+                                .show()
+                                .unwrap();
+                        }
+                    });
                 } else {
                     log::debug!(
                         "waiting for `{}` to appear",
@@ -239,6 +274,18 @@ impl Manager {
 
         Ok(())
     }
+}
+
+fn write_script(script: &str) -> Result<NamedTempFile, anyhow::Error> {
+    let mut tmp = NamedTempFile::new()?;
+    tmp.write_all(script.as_bytes())?;
+
+    let metadata = tmp.as_file().metadata()?;
+    let mut permissions = metadata.permissions();
+    permissions.set_mode(0o700);
+    tmp.as_file().set_permissions(permissions)?;
+
+    Ok(tmp)
 }
 
 enum RoundAccuracy {

@@ -1,0 +1,16 @@
+---
+source: src/settings.rs
+expression: settings
+---
+icon-name: backup
+title: Backup
+scripts:
+  - name: Backup
+    icon-name: ~
+    backup-script: "#!/usr/bin/env bash\nset -o errexit\n/usr/bin/backup.sh\n"
+    backup-path: ~
+    interval: 1day
+    reminder: ~
+    post-backup-actions: []
+    last-backup: ~
+autostart: false

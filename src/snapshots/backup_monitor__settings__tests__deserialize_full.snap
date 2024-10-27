@@ -1,0 +1,18 @@
+---
+source: src/settings.rs
+expression: settings
+---
+icon-name: backup
+title: Backup
+scripts:
+  - name: Backup
+    icon-name: ~
+    backup-script: "#!/usr/bin/env bash\nset -o errexit\n/usr/bin/backup.sh\n"
+    backup-path: /mnt/backup
+    interval: 1day
+    reminder: 7days
+    post-backup-actions:
+      - label: Unmount backup HDD
+        script: "#!/usr/bin/env bash\nset -o errexit\numount /mnt/backup\n"
+    last-backup: "2024-10-24T20:18:00.857399073Z"
+autostart: true
