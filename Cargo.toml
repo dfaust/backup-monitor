@@ -19,7 +19,7 @@ humantime-serde = "1.1.1"
 ksni = "0.2.2"
 log = "0.4.22"
 mio = { version = "1.0.2", features = ["os-ext", "os-poll"] }
-notify = { version = "6.1.1", default-features = false }
+notify = { version = "7.0.0", default-features = false }
 notify-rust = "4.11.3"
 serde = { version = "1.0.210", features = ["derive"] }
 serde_yaml_ng = "0.10.0"
