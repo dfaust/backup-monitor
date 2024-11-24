@@ -9,5 +9,5 @@
     ]
     next_backup: 59m
     next_reminder: 7h 59m
-    next_ui_update: 0m
+    next_ui_update: 1ms
 }

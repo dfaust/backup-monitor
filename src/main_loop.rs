@@ -39,8 +39,12 @@ pub fn main_loop(
             }
         }
 
-        let (tray_data, show_reminder, next_wakeup) =
-            analyze(&mut manager, &clock, &mut last_reminder, &settings.load())?;
+        let (tray_data, show_reminder, next_wakeup) = analyze(
+            clock.now(),
+            &mut manager,
+            &mut last_reminder,
+            &settings.load(),
+        )?;
 
         handle.update(tray_data);
 
@@ -81,6 +85,8 @@ fn handle_event(
             manager.run(Some(&name), handle)?;
         }
         Some(Event::MountsChanged(mounts)) => {
+            log::info!("reloading mounts");
+
             manager.set_mounts(&mounts);
 
             log::info!("running scripts");
@@ -106,7 +112,7 @@ fn wait(
             let now = clock.now();
             let deadline = deadline.max(now);
             let timeout = (deadline - now).to_std()?;
-            log::trace!(
+            log::debug!(
                 "waiting until {} ({})",
                 deadline.with_timezone(&Local),
                 humantime::format_duration(timeout)
@@ -114,7 +120,7 @@ fn wait(
             Some(timeout)
         }
         None => {
-            log::trace!("waiting");
+            log::debug!("waiting");
             None
         }
     };
@@ -127,8 +133,8 @@ fn wait(
 }
 
 fn analyze(
+    now: DateTime<Utc>,
     manager: &mut impl Manager,
-    clock: &Clock,
     last_reminder: &mut Option<DateTime<Utc>>,
     settings: &Settings,
 ) -> anyhow::Result<(TrayData, bool, Option<DateTime<Utc>>)> {
@@ -142,15 +148,15 @@ fn analyze(
 
     let next_wakeup = next_wakeup(next_backup, next_reminder_notification, next_ui_update);
 
-    if next_reminder_notification.is_some_and(|ts| ts <= clock.now())
-        && last_reminder.map_or(true, |ts| ts <= clock.now() - REMINDER_INTERVAL)
+    if next_reminder_notification.is_some_and(|ts| ts <= now)
+        && last_reminder.map_or(true, |ts| ts <= now - REMINDER_INTERVAL)
     {
         show_reminder = true;
-        *last_reminder = Some(clock.now());
+        *last_reminder = Some(now);
     }
 
     let tray_data = TrayData {
-        status: if next_reminder.is_some_and(|ts| ts <= clock.now()) {
+        status: if next_reminder.is_some_and(|ts| ts <= now) {
             Some(ksni::Status::NeedsAttention)
         } else {
             Some(ksni::Status::Passive)
@@ -223,7 +229,6 @@ mod tests {
         #[serde(default, with = "humantime_serde")]
         next_ui_update: Option<Duration>,
 
-        // scripts: Vec<Script>,
         #[serde(default, with = "humantime_serde")]
         last_reminder: Option<Duration>,
 
@@ -263,7 +268,7 @@ mod tests {
         let mut last_reminder = test_case.last_reminder.map(|delta| clock.now() - delta);
 
         let (tray_data, show_reminder, next_wakeup) =
-            analyze(&mut manager, &clock, &mut last_reminder, &settings).unwrap();
+            analyze(clock.now(), &mut manager, &mut last_reminder, &settings).unwrap();
 
         assert_eq!(
             (

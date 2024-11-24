@@ -70,13 +70,14 @@ impl ScriptManager {
 
 impl Manager for ScriptManager {
     fn next_backup(&self) -> Option<DateTime<Utc>> {
+        let now = self.clock.now();
         let settings = self.settings.load();
 
         settings
             .scripts
             .iter()
             .filter_map(|script| match self.script_state(script) {
-                ScriptState::WaitingForTime => Some(next_backup(&self.clock, script)),
+                ScriptState::WaitingForTime => Some(next_backup(now, script)),
                 ScriptState::WaitingForPaths(_) | ScriptState::Running => None,
                 ScriptState::Failed(ts, _) => Some(ts + RETRY_INTERVAL),
             })
@@ -84,24 +85,26 @@ impl Manager for ScriptManager {
     }
 
     fn next_reminder(&self) -> Option<DateTime<Utc>> {
+        let now = self.clock.now();
         let settings = self.settings.load();
 
         settings
             .scripts
             .iter()
             .filter(|script| self.script_state(script) != ScriptState::Running)
-            .filter_map(|script| next_reminder(&self.clock, script))
+            .filter_map(|script| next_reminder(now, script))
             .min()
     }
 
     fn next_ui_update(&self) -> Option<DateTime<Utc>> {
+        let now = self.clock.now();
         let settings = self.settings.load();
 
         settings
             .scripts
             .iter()
             .filter(|script| self.script_state(script) == ScriptState::WaitingForTime)
-            .map(|script| next_ui_update(&self.clock, script))
+            .map(|script| next_ui_update(now, script))
             .min()
     }
 
@@ -132,7 +135,6 @@ impl Manager for ScriptManager {
     }
 
     fn set_mounts(&mut self, mounts: &str) {
-        dbg!(mounts);
         let mounts = parse_mounts(mounts);
 
         for mount in &self.mounts {
@@ -158,8 +160,10 @@ impl Manager for ScriptManager {
         let settings = self.settings.load_full();
 
         for script in &settings.scripts {
+            let now = self.clock.now();
+
             if script_name.is_some_and(|name| name == script.name)
-                || (script_name.is_none() && next_backup(&self.clock, script) <= self.clock.now())
+                || (script_name.is_none() && next_backup(now, script) <= now)
             {
                 if script
                     .mount_paths
@@ -338,18 +342,16 @@ fn write_script(script: &str) -> Result<NamedTempFile, anyhow::Error> {
     Ok(tmp)
 }
 
-fn next_backup(clock: &Clock, script: &Script) -> DateTime<Utc> {
+fn next_backup(now: DateTime<Utc>, script: &Script) -> DateTime<Utc> {
     script
         .last_backup
         .as_ref()
-        .map_or_else(|| clock.now(), |last_backup| *last_backup + script.interval)
+        .map_or(now, |last_backup| *last_backup + script.interval)
 }
 
-fn next_ui_update(clock: &Clock, script: &Script) -> DateTime<Utc> {
-    let now = clock.now();
-
+fn next_ui_update(now: DateTime<Utc>, script: &Script) -> DateTime<Utc> {
     let (_, next_backup_remainder) = round_duration(
-        next_backup(clock, script).max(now) - now,
+        next_backup(now, script).max(now) - now,
         RoundAccuracy::Minutes,
         RoundDirection::Down,
     );
@@ -366,15 +368,15 @@ fn next_ui_update(clock: &Clock, script: &Script) -> DateTime<Utc> {
     let remainder =
         last_backup_remainder.map_or(next_backup_remainder, |r| r.min(next_backup_remainder));
 
-    clock.now() + remainder
+    now + remainder + Duration::milliseconds(1)
 }
 
-fn next_reminder(clock: &Clock, script: &Script) -> Option<DateTime<Utc>> {
+fn next_reminder(now: DateTime<Utc>, script: &Script) -> Option<DateTime<Utc>> {
     let reminder = script.reminder?;
     let next_reminder = script
         .last_backup
         .as_ref()
-        .map_or_else(|| clock.now(), |last_backup| *last_backup + reminder);
+        .map_or(now, |last_backup| *last_backup + reminder);
     Some(next_reminder)
 }
 
@@ -398,7 +400,7 @@ fn tooltip(clock: &Clock, script: &Script, state: &ScriptState) -> String {
         ScriptState::WaitingForTime => {
             let now = clock.now();
             let (next_backup, _) = round_duration(
-                next_backup(clock, script).max(now) - now,
+                next_backup(now, script).max(now) - now,
                 RoundAccuracy::Minutes,
                 RoundDirection::Down,
             );
@@ -481,6 +483,7 @@ mod tests {
     #[case("never_backed_up")]
     #[case("blocked_by_last_backup_1")]
     #[case("blocked_by_last_backup_2")]
+    #[case("blocked_by_last_backup_3")]
     #[case("waiting_for_path")]
     #[case("running")]
     #[case("failed_with_cooldown")]
@@ -499,6 +502,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         let clock = Faker.fake::<Clock>();
+        let now = clock.now();
         let settings = Arc::new(ArcSwap::from_pointee(Settings {
             scripts: test_case
                 .scripts
@@ -516,7 +520,7 @@ mod tests {
                     ["WaitingForPath", path] => ScriptState::WaitingForPaths(vec![path.into()]),
                     ["Running"] => ScriptState::Running,
                     ["Failed", ts, message] => ScriptState::Failed(
-                        clock.now() - humantime::parse_duration(ts).unwrap(),
+                        now - humantime::parse_duration(ts).unwrap(),
                         message.to_string(),
                     ),
                     _ => unimplemented!(),
@@ -529,13 +533,13 @@ mod tests {
             (
                 manager
                     .next_backup()
-                    .map(|ts| (max(ts, clock.now()) - clock.now()).to_std().unwrap()),
+                    .map(|ts| (max(ts, now) - now).to_std().unwrap()),
                 manager
                     .next_reminder()
-                    .map(|ts| (max(ts, clock.now()) - clock.now()).to_std().unwrap()),
+                    .map(|ts| (max(ts, now) - now).to_std().unwrap()),
                 manager
                     .next_ui_update()
-                    .map(|ts| (max(ts, clock.now()) - clock.now()).to_std().unwrap()),
+                    .map(|ts| (max(ts, now) - now).to_std().unwrap()),
             ),
             (
                 test_case.next_backup,

@@ -4,10 +4,10 @@
             mount_paths: []
             interval: 1h
             reminder: 8h
-            last_backup: null
+            last_backup: 1m 1s
         }
     ]
-    next_backup: 0m
-    next_reminder: 0m
-    next_ui_update: 1ms
+    next_backup: 58m 59s
+    next_reminder: 7h 58m 59s
+    next_ui_update: 59s
 }
