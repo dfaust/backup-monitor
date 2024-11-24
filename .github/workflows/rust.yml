@@ -10,10 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  test:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
     - name: Install dependencies
@@ -22,3 +20,17 @@ jobs:
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Compile and release
+      uses: rust-build/rust-build.action@v1.4.5
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        PRE_BUILD: pre-build.sh
+        RUSTTARGET: x86_64-unknown-linux-musl
+        TOOLCHAIN_VERSION: stable
+        EXTRA_FILES: "README.md LICENSE"
