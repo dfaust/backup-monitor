@@ -1,0 +1,13 @@
+{
+    next_backup: null
+    next_reminder: 1m
+    next_ui_update: null
+    last_reminder: 5h
+    tray_data: {
+        status: Passive
+        tooltip: ""
+        scripts: []
+    }
+    show_reminder: false
+    next_wakeup: 1m
+}

@@ -1,0 +1,14 @@
+{
+    scripts: [
+        {
+            backup_path: /mnt/backup-monitor/backup
+            interval: 1h
+            reminder: 8h
+            last_backup: null
+            state: WaitingForPath:/mnt/backup-monitor/backup
+        }
+    ]
+    next_backup: null
+    next_reminder: 0m
+    next_ui_update: null
+}

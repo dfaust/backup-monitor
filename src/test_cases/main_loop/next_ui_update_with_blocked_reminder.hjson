@@ -1,0 +1,13 @@
+{
+    next_backup: 1h
+    next_reminder: 0m
+    next_ui_update: 10s
+    last_reminder: 1m
+    tray_data: {
+        status: NeedsAttention
+        tooltip: ""
+        scripts: []
+    }
+    show_reminder: false
+    next_wakeup: 10s
+}

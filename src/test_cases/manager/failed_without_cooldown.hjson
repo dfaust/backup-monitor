@@ -1,0 +1,14 @@
+{
+    scripts: [
+        {
+            backup_path: null
+            interval: 1h
+            reminder: 8h
+            last_backup: null
+            state: Failed:2h:oops
+        }
+    ]
+    next_backup: 0m
+    next_reminder: 0m
+    next_ui_update: null
+}
