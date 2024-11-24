@@ -42,6 +42,13 @@ fn main() -> anyhow::Result<()> {
         .format_timestamp(None)
         .init();
 
+    log::info!(
+        "starting {} version {} ({})",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION"),
+        env!("CARGO_PKG_HOMEPAGE")
+    );
+
     let settings = Settings::load()?;
 
     let (tx, rx) = mpsc::channel::<Event>();

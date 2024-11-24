@@ -1,6 +1,8 @@
 [package]
 name = "backup-monitor"
 version = "0.1.0"
+homepage = "https://github.com/dfaust/backup-monitor"
+license = "MIT"
 edition = "2021"
 
 [dependencies]
