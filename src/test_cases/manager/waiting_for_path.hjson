@@ -1,7 +1,7 @@
 {
     scripts: [
         {
-            backup_path: /mnt/backup-monitor/backup
+            mount_paths: ["/mnt/backup-monitor/backup"]
             interval: 1h
             reminder: 8h
             last_backup: null

@@ -1,7 +1,7 @@
 {
     scripts: [
         {
-            backup_path: null
+            mount_paths: []
             interval: 1h
             reminder: 8h
             last_backup: 1m 1s

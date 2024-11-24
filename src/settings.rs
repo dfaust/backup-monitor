@@ -21,7 +21,8 @@ pub struct Script {
 
     pub backup_script: String,
 
-    pub backup_path: Option<PathBuf>,
+    #[serde(default)]
+    pub mount_paths: Vec<PathBuf>,
 
     #[serde(with = "humantime_serde")]
     pub interval: Duration,
@@ -143,7 +144,7 @@ mod tests {
                 #!/usr/bin/env bash
                 set -o errexit
                 /usr/bin/backup.sh
-              backup-path: /mnt/backup
+              mount-paths: [\"/mnt/backup\"]
               interval: 1day
               reminder: 7days
               post-backup-actions:

@@ -6,7 +6,7 @@ use std::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
-    MountDetected,
+    MountsChanged(String),
     SettingsChanged,
     ManualRun(String),
 }

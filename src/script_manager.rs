@@ -1,9 +1,8 @@
 use std::{
-    collections::HashMap,
-    fs::{self, File},
-    io::{self, Write},
+    collections::{HashMap, HashSet},
+    io::Write,
     os::unix::fs::PermissionsExt,
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::Command,
     sync::Arc,
     time::Instant,
@@ -11,6 +10,7 @@ use std::{
 
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Duration, Utc};
+use itertools::Itertools;
 use notify_rust::{Hint, Notification, Timeout};
 use serde::Deserialize;
 use tempfile::NamedTempFile;
@@ -30,7 +30,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 enum ScriptState {
     WaitingForTime,
-    WaitingForPath(PathBuf),
+    WaitingForPaths(Vec<PathBuf>),
     Running,
     Failed(DateTime<Utc>, String),
 }
@@ -39,24 +39,26 @@ pub struct ScriptManager {
     clock: Clock,
     settings: Arc<ArcSwap<Settings>>,
     states: HashMap<String, ScriptState>,
+    mounts: HashSet<PathBuf>,
 }
 
 impl ScriptManager {
-    pub fn new(clock: Clock, settings: Arc<ArcSwap<Settings>>) -> ScriptManager {
+    pub fn new(clock: Clock, settings: Arc<ArcSwap<Settings>>, mounts: &str) -> ScriptManager {
         ScriptManager {
             clock,
             settings,
             states: HashMap::new(),
+            mounts: parse_mounts(mounts),
         }
     }
 
     fn script_state(&self, script: &Script) -> ScriptState {
         match self.states.get(&script.name) {
-            Some(ScriptState::WaitingForPath(path))
-                if script
-                    .backup_path
-                    .as_ref()
-                    .map_or(true, |backup_path| path != backup_path) =>
+            Some(ScriptState::WaitingForPaths(paths))
+                if !script
+                    .mount_paths
+                    .iter()
+                    .any(|backup_path| paths.contains(backup_path)) =>
             {
                 ScriptState::WaitingForTime
             }
@@ -75,7 +77,7 @@ impl Manager for ScriptManager {
             .iter()
             .filter_map(|script| match self.script_state(script) {
                 ScriptState::WaitingForTime => Some(next_backup(&self.clock, script)),
-                ScriptState::WaitingForPath(_) | ScriptState::Running => None,
+                ScriptState::WaitingForPaths(_) | ScriptState::Running => None,
                 ScriptState::Failed(ts, _) => Some(ts + RETRY_INTERVAL),
             })
             .min()
@@ -129,6 +131,25 @@ impl Manager for ScriptManager {
         items.join("\n\n")
     }
 
+    fn set_mounts(&mut self, mounts: &str) {
+        dbg!(mounts);
+        let mounts = parse_mounts(mounts);
+
+        for mount in &self.mounts {
+            if !mounts.contains(mount) {
+                log::debug!("`{}` has been unmounted", mount.display());
+            }
+        }
+
+        for mount in &mounts {
+            if !self.mounts.contains(mount) {
+                log::debug!("`{}` has been mounted", mount.display());
+            }
+        }
+
+        self.mounts = mounts;
+    }
+
     fn run(
         &mut self,
         script_name: Option<&str>,
@@ -140,7 +161,11 @@ impl Manager for ScriptManager {
             if script_name.is_some_and(|name| name == script.name)
                 || (script_name.is_none() && next_backup(&self.clock, script) <= self.clock.now())
             {
-                if script.backup_path.as_ref().map_or(Ok(true), is_mounted)? {
+                if script
+                    .mount_paths
+                    .iter()
+                    .all(|path| self.mounts.contains(path))
+                {
                     log::info!("running backup script `{}`", script.name);
 
                     self.states
@@ -259,15 +284,23 @@ impl Manager for ScriptManager {
                         }
                     });
                 } else {
+                    let paths = script
+                        .mount_paths
+                        .iter()
+                        .filter(|path| !self.mounts.contains(*path))
+                        .cloned()
+                        .collect::<Vec<_>>();
+
                     log::debug!(
-                        "waiting for `{}` to appear",
-                        script.backup_path.as_ref().unwrap().display()
+                        "waiting for folders {} to be mounted",
+                        paths
+                            .iter()
+                            .map(|path| format!("`{}`", path.display()))
+                            .join(", ")
                     );
 
-                    self.states.insert(
-                        script.name.clone(),
-                        ScriptState::WaitingForPath(script.backup_path.as_ref().unwrap().clone()),
-                    );
+                    self.states
+                        .insert(script.name.clone(), ScriptState::WaitingForPaths(paths));
                 }
             }
 
@@ -279,6 +312,18 @@ impl Manager for ScriptManager {
 
         Ok(())
     }
+}
+
+fn parse_mounts(mounts: &str) -> HashSet<PathBuf> {
+    mounts
+        .lines()
+        .filter_map(
+            |line| match line.split_whitespace().collect::<Vec<_>>()[..] {
+                [_, mount, ..] => Some(PathBuf::from(mount)),
+                _ => None,
+            },
+        )
+        .collect()
 }
 
 fn write_script(script: &str) -> Result<NamedTempFile, anyhow::Error> {
@@ -362,8 +407,14 @@ fn tooltip(clock: &Clock, script: &Script, state: &ScriptState) -> String {
                 humantime::format_duration(next_backup.to_std().unwrap())
             )
         }
-        ScriptState::WaitingForPath(path) => {
-            format!("Waiting for backup folder \"{}\" to appear", path.display())
+        ScriptState::WaitingForPaths(paths) => {
+            format!(
+                "Waiting for folders {} to be mounted",
+                paths
+                    .iter()
+                    .map(|path| format!("\"{}\"", path.display()))
+                    .join(", ")
+            )
         }
         ScriptState::Running => "Running".to_string(),
         ScriptState::Failed(_, message) => format!("Failed: {message}",),
@@ -372,36 +423,17 @@ fn tooltip(clock: &Clock, script: &Script, state: &ScriptState) -> String {
     format!("{last_backup}\n{status}")
 }
 
-fn is_mounted(path: impl AsRef<Path>) -> io::Result<bool> {
-    let path = path.as_ref();
-
-    log::debug!("checking if `{}` exists and is writable", path.display());
-
-    if path.exists() {
-        let test_file_path = path.join(".backup-monitor-test");
-
-        match File::create_new(&test_file_path) {
-            Ok(_) => {
-                fs::remove_file(&test_file_path)?;
-                Ok(true)
-            }
-            Err(_) => Ok(false),
-        }
-    } else {
-        Ok(false)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use fake::{Fake, Faker};
+    use indoc::indoc;
     use serde::Deserialize;
-    use std::{fs::File, time::Duration};
+    use std::{cmp::max, fs::File, time::Duration};
 
     #[derive(Debug, Deserialize)]
     struct ScheduleTestScript {
-        pub backup_path: Option<PathBuf>,
+        pub mount_paths: Vec<PathBuf>,
 
         #[serde(with = "humantime_serde")]
         pub interval: Duration,
@@ -421,7 +453,7 @@ mod tests {
                 name: Faker.fake(),
                 icon_name: None,
                 backup_script: "#!/bin/bash".to_string(),
-                backup_path: self.backup_path,
+                mount_paths: self.mount_paths,
                 interval: self.interval,
                 reminder: self.reminder,
                 post_backup_actions: Vec::new(),
@@ -454,8 +486,6 @@ mod tests {
     #[case("failed_with_cooldown")]
     #[case("failed_without_cooldown")]
     fn schedule(#[case] name: &str) {
-        use std::cmp::max;
-
         let test_case = serde_hjson::from_reader::<_, ScheduleTestCase>(
             File::open(format!("./src/test_cases/manager/{name}.hjson")).unwrap(),
         )
@@ -477,13 +507,13 @@ mod tests {
                 .collect(),
             ..Default::default()
         }));
-        let mut manager = ScriptManager::new(clock, settings.clone());
+        let mut manager = ScriptManager::new(clock, settings.clone(), "");
 
         for (script, state) in settings.load().scripts.iter().zip(script_states) {
             if let Some(state) = state {
                 let state = match state.split(':').collect::<Vec<_>>()[..] {
                     ["WaitingForTime"] => ScriptState::WaitingForTime,
-                    ["WaitingForPath", path] => ScriptState::WaitingForPath(path.into()),
+                    ["WaitingForPath", path] => ScriptState::WaitingForPaths(vec![path.into()]),
                     ["Running"] => ScriptState::Running,
                     ["Failed", ts, message] => ScriptState::Failed(
                         clock.now() - humantime::parse_duration(ts).unwrap(),
@@ -514,5 +544,22 @@ mod tests {
             ),
             "{name}"
         );
+    }
+
+    #[test]
+    fn set_mounts() {
+        let clock = Faker.fake::<Clock>();
+        let settings = Arc::new(ArcSwap::from_pointee(Settings::default()));
+        let mut manager = ScriptManager::new(clock, settings, "");
+
+        manager.set_mounts(indoc! {"
+            /dev/nvme0n1p2 / btrfs rw,relatime,ssd,discard=async,space_cache=v2,subvolid=403,subvol=/@/.snapshots/138/snapshot 0 0
+            devtmpfs /dev devtmpfs rw,nosuid,size=4096k,nr_inodes=8192558,mode=755,inode64 0 0
+            tmpfs /dev/shm tmpfs rw,nosuid,nodev,inode64 0 0
+        "});
+
+        assert!(manager.mounts.contains(&PathBuf::from("/")));
+        assert!(manager.mounts.contains(&PathBuf::from("/dev/shm")));
+        assert!(!manager.mounts.contains(&PathBuf::from("/does-not-exist")));
     }
 }

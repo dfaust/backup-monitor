@@ -1,7 +1,7 @@
 use std::{
     env::current_exe,
     fs::File,
-    io,
+    io::{self, Read, Seek},
     os::unix::prelude::AsRawFd,
     sync::{
         mpsc::{self, Sender},
@@ -53,11 +53,11 @@ fn main() -> anyhow::Result<()> {
     service.spawn();
 
     // watch for mounts
+    let mut file = File::open("/proc/mounts").unwrap();
+    let mut mounts = String::new();
+    let _ = file.read_to_string(&mut mounts);
     let tx_mounts = tx.clone();
-    thread::spawn(|| {
-        let file = File::open("/proc/mounts").unwrap();
-        poll_mounts(file, tx_mounts)
-    });
+    thread::spawn(|| poll_mounts(file, tx_mounts));
 
     // watch for changes to settings file
     let tx_settings = tx.clone();
@@ -89,10 +89,10 @@ fn main() -> anyhow::Result<()> {
     let clock = Clock::new();
     let settings = Arc::new(ArcSwap::from_pointee(settings));
 
-    main_loop(clock, settings, rx, handle, autolaunch)
+    main_loop(clock, settings, mounts, rx, handle, autolaunch)
 }
 
-fn poll_mounts(file: File, tx: Sender<Event>) -> io::Result<()> {
+fn poll_mounts(mut file: File, tx: Sender<Event>) -> io::Result<()> {
     let mut poll = Poll::new()?;
     let mut events = Events::with_capacity(1024);
 
@@ -107,6 +107,10 @@ fn poll_mounts(file: File, tx: Sender<Event>) -> io::Result<()> {
 
         log::debug!("mounts have changed");
 
-        let _ = tx.send(Event::MountDetected);
+        let mut mounts = String::new();
+        let _ = file.rewind();
+        let _ = file.read_to_string(&mut mounts);
+
+        let _ = tx.send(Event::MountsChanged(mounts));
     }
 }

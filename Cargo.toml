@@ -17,6 +17,7 @@ env_logger = "0.11.5"
 fake = { version = "3.0.1", features = ["chrono"] }
 humantime = "2.1.0"
 humantime-serde = "1.1.1"
+itertools = "0.13.0"
 ksni = "0.2.2"
 log = "0.4.22"
 mio = { version = "1.0.2", features = ["os-ext", "os-poll"] }

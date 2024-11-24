@@ -11,6 +11,8 @@ pub trait Manager {
 
     fn tooltip(&self) -> String;
 
+    fn set_mounts(&mut self, mounts: &str);
+
     fn run<'a>(
         &'a mut self,
         script_name: Option<&'a str>,

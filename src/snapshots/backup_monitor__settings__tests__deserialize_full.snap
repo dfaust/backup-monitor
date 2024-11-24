@@ -1,5 +1,6 @@
 ---
 source: src/settings.rs
+assertion_line: 160
 expression: settings
 ---
 icon-name: backup
@@ -8,7 +9,8 @@ scripts:
   - name: Backup
     icon-name: ~
     backup-script: "#!/usr/bin/env bash\nset -o errexit\n/usr/bin/backup.sh\n"
-    backup-path: /mnt/backup
+    mount-paths:
+      - /mnt/backup
     interval: 1day
     reminder: 7days
     post-backup-actions:

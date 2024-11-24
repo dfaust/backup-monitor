@@ -30,6 +30,8 @@ impl Manager for MockManager {
         self.tooltip.clone()
     }
 
+    fn set_mounts(&mut self, _mounts: &str) {}
+
     fn run(
         &mut self,
         script_name: Option<&str>,

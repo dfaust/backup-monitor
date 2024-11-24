@@ -36,7 +36,7 @@ The configuration file is located at `~/.config/backup-monitor.yaml`.
 
 - `backup-script`: Inline script that will be run to create a backup.
 
-- `backup-path` (optional): Destination path of the backup. This can be a path that is not always available. Backup Monitor will watch the path to appear and be writable before starting backups.
+- `mount-paths` (optional): Paths that must be mounted before the backup can be run. Backup Monitor will watch the paths to be mounted before starting backups.
 
 - `interval`: Interval in which backups should be run.
 
@@ -59,7 +59,7 @@ scripts:
     #!/usr/bin/env bash
     set -o errexit
     rsync -ah --delete $HOME/ /mnt/backup/home/
-  backup-path: /mnt/backup
+  mount-paths: ["/mnt/backup"]
   interval: 1day
   reminder: 7days
   post-backup-actions:
@@ -80,7 +80,7 @@ scripts:
     #!/usr/bin/env bash
     set -o errexit
     rsync -ah --delete $HOME/ /mnt/backup/home/
-  backup-path: /mnt/backup
+  mount-paths: ["/mnt/backup"]
   interval: 1day
   reminder: 7days
 - name: System Backup
@@ -88,7 +88,7 @@ scripts:
     #!/usr/bin/env bash
     set -o errexit
     rsync -ah --delete /etc/ /mnt/backup/system/
-  backup-path: /mnt/backup
+  mount-paths: ["/mnt/backup"]
   interval: 1day
   reminder: 7days
 autostart: false

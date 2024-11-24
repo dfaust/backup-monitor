@@ -19,11 +19,12 @@ use crate::{
 pub fn main_loop(
     clock: Clock,
     settings: Arc<ArcSwap<Settings>>,
+    mounts: String,
     rx: impl ReceiveEvent,
     handle: impl TrayHandle<Tray>,
     autolaunch: AutoLaunch,
 ) -> anyhow::Result<()> {
-    let mut manager = ScriptManager::new(clock, settings.clone());
+    let mut manager = ScriptManager::new(clock, settings.clone(), &mounts);
 
     let mut last_reminder = None;
 
@@ -79,7 +80,14 @@ fn handle_event(
 
             manager.run(Some(&name), handle)?;
         }
-        Some(Event::MountDetected) | None => {
+        Some(Event::MountsChanged(mounts)) => {
+            manager.set_mounts(&mounts);
+
+            log::info!("running scripts");
+
+            manager.run(None, handle)?;
+        }
+        None => {
             log::info!("running scripts");
 
             manager.run(None, handle)?;
