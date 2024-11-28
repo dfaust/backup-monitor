@@ -10,4 +10,5 @@
     }
     show_reminder: false
     next_wakeup: 3h
+    wakeup_reason: ShowReminder
 }

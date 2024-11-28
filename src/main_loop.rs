@@ -1,4 +1,7 @@
-use std::sync::{mpsc::RecvTimeoutError, Arc};
+use std::{
+    fmt,
+    sync::{mpsc::RecvTimeoutError, Arc},
+};
 
 use arc_swap::ArcSwap;
 use auto_launch::AutoLaunch;
@@ -15,6 +18,27 @@ use crate::{
     tray_handle::{TrayData, TrayHandle},
     Event, REMINDER_INTERVAL,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WakeupReason {
+    RunScripts,
+    ShowReminder,
+    UpdateUi,
+}
+
+impl fmt::Display for WakeupReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                WakeupReason::RunScripts => "run scripts",
+                WakeupReason::ShowReminder => "show reminder",
+                WakeupReason::UpdateUi => "update ui",
+            }
+        )
+    }
+}
 
 pub fn main_loop(
     clock: Clock,
@@ -61,12 +85,13 @@ pub fn main_loop(
 
         let event = wait(next_wakeup, &clock, &rx)?;
 
-        handle_event(event, &settings, &mut manager, &handle)?;
+        handle_event(event, next_wakeup, &settings, &mut manager, &handle)?;
     }
 }
 
 fn handle_event(
     event: Option<Event>,
+    next_wakeup: Option<(DateTime<Utc>, WakeupReason)>,
     settings: &Arc<ArcSwap<Settings>>,
     manager: &mut impl Manager,
     handle: &impl TrayHandle<Tray>,
@@ -93,27 +118,28 @@ fn handle_event(
 
             manager.run(None, handle)?;
         }
-        None => {
+        None if next_wakeup.is_none_or(|(_, reason)| reason == WakeupReason::RunScripts) => {
             log::info!("running scripts");
 
             manager.run(None, handle)?;
         }
+        None => {}
     }
     Ok(())
 }
 
 fn wait(
-    next_wakeup: Option<DateTime<Utc>>,
+    next_wakeup: Option<(DateTime<Utc>, WakeupReason)>,
     clock: &Clock,
     rx: &impl ReceiveEvent,
 ) -> anyhow::Result<Option<Event>> {
     let timeout = match next_wakeup {
-        Some(deadline) => {
+        Some((deadline, reason)) => {
             let now = clock.now();
             let deadline = deadline.max(now);
             let timeout = (deadline - now).to_std()?;
             log::debug!(
-                "waiting until {} ({})",
+                "waiting until {} ({}) to {reason}",
                 deadline.with_timezone(&Local),
                 humantime::format_duration(timeout)
             );
@@ -132,12 +158,13 @@ fn wait(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn analyze(
     now: DateTime<Utc>,
     manager: &mut impl Manager,
     last_reminder: &mut Option<DateTime<Utc>>,
     settings: &Settings,
-) -> anyhow::Result<(TrayData, bool, Option<DateTime<Utc>>)> {
+) -> anyhow::Result<(TrayData, bool, Option<(DateTime<Utc>, WakeupReason)>)> {
     let mut show_reminder = false;
 
     let next_backup = manager.next_backup();
@@ -192,18 +219,24 @@ fn next_wakeup(
     next_backup: Option<DateTime<Utc>>,
     next_reminder_notification: Option<DateTime<Utc>>,
     next_ui_update: Option<DateTime<Utc>>,
-) -> Option<DateTime<Utc>> {
-    let mut next_wakeup = next_backup;
+) -> Option<(DateTime<Utc>, WakeupReason)> {
+    let mut next_wakeup = next_backup.map(|ts| (ts, WakeupReason::RunScripts));
 
     if let Some(next_reminder) = next_reminder_notification {
-        if next_wakeup.map_or(true, |ts| ts >= next_reminder) {
-            next_wakeup = Some(next_reminder);
+        if next_wakeup
+            .as_ref()
+            .map_or(true, |(ts, _)| *ts > next_reminder)
+        {
+            next_wakeup = Some((next_reminder, WakeupReason::ShowReminder));
         }
     }
 
     if let Some(next_ui_update) = next_ui_update {
-        if next_wakeup.map_or(true, |ts| ts >= next_ui_update) {
-            next_wakeup = Some(next_ui_update);
+        if next_wakeup
+            .as_ref()
+            .map_or(true, |(ts, _)| *ts > next_ui_update)
+        {
+            next_wakeup = Some((next_ui_update, WakeupReason::UpdateUi));
         }
     }
 
@@ -215,8 +248,28 @@ mod tests {
     use super::*;
     use crate::mock_manager::MockManager;
     use fake::{Fake, Faker};
-    use serde::Deserialize;
+    use serde::{Deserialize, Deserializer};
     use std::{fs::File, time::Duration};
+
+    pub fn deserialize_wakeup_reason<'de, D>(
+        deserializer: D,
+    ) -> Result<Option<WakeupReason>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let opt: Option<String> = Option::deserialize(deserializer)?;
+        match opt {
+            Some(s) => match s.to_lowercase().as_str() {
+                "runscripts" => Ok(Some(WakeupReason::RunScripts)),
+                "showreminder" => Ok(Some(WakeupReason::ShowReminder)),
+                "updateui" => Ok(Some(WakeupReason::UpdateUi)),
+                _ => Err(serde::de::Error::custom(format!(
+                    "Invalid wakeup reason: {s}"
+                ))),
+            },
+            None => Ok(None),
+        }
+    }
 
     #[derive(Debug, Deserialize)]
     struct AnalyzeTestCase {
@@ -238,6 +291,9 @@ mod tests {
 
         #[serde(default, with = "humantime_serde")]
         next_wakeup: Option<Duration>,
+
+        #[serde(default, deserialize_with = "deserialize_wakeup_reason")]
+        wakeup_reason: Option<WakeupReason>,
     }
 
     #[rstest::rstest]
@@ -274,12 +330,14 @@ mod tests {
             (
                 tray_data,
                 show_reminder,
-                next_wakeup.map(|ts| (ts - clock.now()).to_std().unwrap())
+                next_wakeup.map(|(ts, _)| (ts - clock.now()).to_std().unwrap()),
+                next_wakeup.map(|(_, reason)| reason)
             ),
             (
                 test_case.tray_data,
                 test_case.show_reminder,
-                test_case.next_wakeup
+                test_case.next_wakeup,
+                test_case.wakeup_reason
             ),
             "{name}"
         );

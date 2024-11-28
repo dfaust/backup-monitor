@@ -10,4 +10,5 @@
     }
     show_reminder: true
     next_wakeup: 0m
+    wakeup_reason: ShowReminder
 }

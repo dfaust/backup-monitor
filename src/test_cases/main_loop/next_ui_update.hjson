@@ -10,4 +10,5 @@
     }
     show_reminder: false
     next_wakeup: 10s
+    wakeup_reason: UpdateUi
 }

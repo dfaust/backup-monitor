@@ -10,4 +10,5 @@
     }
     show_reminder: false
     next_wakeup: 1m
+    wakeup_reason: RunScripts
 }
