@@ -196,9 +196,15 @@ impl Manager for ScriptManager {
                     let state;
                     let summary;
                     let body;
-                    match Command::new(tmp.path()).status() {
-                        Ok(status) => {
-                            if status.success() {
+                    match Command::new(tmp.path()).output() {
+                        Ok(output) => {
+                            if output.status.success() {
+                                log::info!(
+                                    "backup script `{}` finished (took {})",
+                                    script.name,
+                                    humantime::format_duration(start.elapsed()),
+                                );
+
                                 let (run_duration, _) = round_duration(
                                     Duration::from_std(start.elapsed())?,
                                     RoundAccuracy::Seconds,
@@ -206,9 +212,13 @@ impl Manager for ScriptManager {
                                 );
                                 summary = format!("{} finished", script.name);
                                 body = format!(
-                                    "Backup took {}",
-                                    humantime::format_duration(run_duration.to_std()?)
-                                );
+                                    "Backup took {}.\n\n{}\n{}",
+                                    humantime::format_duration(run_duration.to_std()?),
+                                    String::from_utf8_lossy(&output.stdout),
+                                    String::from_utf8_lossy(&output.stderr),
+                                )
+                                .trim()
+                                .to_string();
                                 state = ScriptState::WaitingForTime;
 
                                 // get latest settings
@@ -223,19 +233,53 @@ impl Manager for ScriptManager {
 
                                 // save new settings
                                 settings.save()?;
-                            } else if let Some(code) = status.code() {
-                                summary = format!("{} failed with exit code {code}", script.name);
-                                body = String::new();
+                            } else if let Some(code) = output.status.code() {
+                                log::error!(
+                                    "backup script `{}` failed with exit code `{}`",
+                                    script.name,
+                                    code
+                                );
+
+                                summary = format!("{} failed", script.name);
+                                body = format!(
+                                    "Backup failed with exit code {}.\n\n{}\n{}",
+                                    code,
+                                    String::from_utf8_lossy(&output.stdout),
+                                    String::from_utf8_lossy(&output.stderr),
+                                )
+                                .trim()
+                                .to_string();
                                 state = ScriptState::Failed(self.clock.now(), summary.clone());
                             } else {
+                                log::error!("backup script `{}` failed", script.name);
+
                                 summary = format!("{} failed", script.name);
-                                body = String::new();
+                                body = format!(
+                                    "Backup failed.\n\n{}\n{}",
+                                    String::from_utf8_lossy(&output.stdout),
+                                    String::from_utf8_lossy(&output.stderr),
+                                )
+                                .trim()
+                                .to_string();
                                 state = ScriptState::Failed(self.clock.now(), summary.clone());
+                            }
+
+                            if !output.stdout.is_empty() {
+                                log::info!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+                            }
+                            if !output.stderr.is_empty() {
+                                log::info!("stderr: {}", String::from_utf8_lossy(&output.stderr));
                             }
                         }
                         Err(error) => {
-                            summary = format!("{} failed with error", script.name);
-                            body = error.to_string();
+                            log::error!(
+                                "backup script `{}` failed with error `{}`",
+                                script.name,
+                                error
+                            );
+
+                            summary = format!("{} failed", script.name);
+                            body = format!("Backup failed with error:\n\n{error}",);
                             state = ScriptState::Failed(self.clock.now(), error.to_string());
                         }
                     };
@@ -259,16 +303,75 @@ impl Manager for ScriptManager {
 
                             let tmp = write_script(&action.script).unwrap();
 
+                            let start = Instant::now();
+
                             let summary;
                             let body;
-                            match Command::new(tmp.path()).status() {
-                                Ok(status) => {
-                                    if status.success() {
+                            match Command::new(tmp.path()).output() {
+                                Ok(output) => {
+                                    if output.status.success() {
+                                        log::info!(
+                                            "post backup script `{}` finished (took {})",
+                                            action.label,
+                                            humantime::format_duration(start.elapsed())
+                                        );
+
+                                        let (run_duration, _) = round_duration(
+                                            Duration::from_std(start.elapsed()).unwrap_or_default(),
+                                            RoundAccuracy::Seconds,
+                                            RoundDirection::Down,
+                                        );
                                         summary = format!("{} finished", action.label);
-                                        body = String::new();
-                                    } else {
+                                        body = format!(
+                                            "Post backup script took {}.\n\n{}\n{}",
+                                            humantime::format_duration(
+                                                run_duration.to_std().unwrap_or_default()
+                                            ),
+                                            String::from_utf8_lossy(&output.stdout),
+                                            String::from_utf8_lossy(&output.stderr),
+                                        )
+                                        .trim()
+                                        .to_string();
+                                    } else if let Some(code) = output.status.code() {
+                                        log::error!(
+                                            "post backup script `{}` failed with exit code `{}`",
+                                            action.label,
+                                            code
+                                        );
+
                                         summary = format!("{} failed", action.label);
-                                        body = String::new();
+                                        body = format!(
+                                            "Post backup script failed with exit code {}.\n\n{}\n{}",
+                                            code,
+                                            String::from_utf8_lossy(&output.stdout),
+                                            String::from_utf8_lossy(&output.stderr),
+                                        )
+                                        .trim()
+                                        .to_string();
+                                    } else {
+                                        log::error!("post backup script `{}` failed", action.label);
+
+                                        summary = format!("{} failed", action.label);
+                                        body = format!(
+                                            "Post backup script failed.\n\n{}\n{}",
+                                            String::from_utf8_lossy(&output.stdout),
+                                            String::from_utf8_lossy(&output.stderr),
+                                        )
+                                        .trim()
+                                        .to_string();
+                                    }
+
+                                    if !output.stdout.is_empty() {
+                                        log::info!(
+                                            "stdout: {}",
+                                            String::from_utf8_lossy(&output.stdout)
+                                        );
+                                    }
+                                    if !output.stderr.is_empty() {
+                                        log::info!(
+                                            "stderr: {}",
+                                            String::from_utf8_lossy(&output.stderr)
+                                        );
                                     }
                                 }
                                 Err(error) => {
