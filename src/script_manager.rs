@@ -1,7 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    io::Write,
-    os::unix::fs::PermissionsExt,
     path::PathBuf,
     process::Command,
     sync::Arc,
@@ -13,7 +11,6 @@ use chrono::{DateTime, Duration, Utc};
 use itertools::Itertools;
 use notify_rust::{Hint, Notification, Timeout};
 use serde::Deserialize;
-use tempfile::NamedTempFile;
 
 use crate::tray_handle::TrayHandle;
 use crate::{clock::Clock, manager::Manager};
@@ -189,14 +186,18 @@ impl Manager for ScriptManager {
                         ..Default::default()
                     });
 
-                    let tmp = write_script(&script.backup_script)?;
+                    let interpreter = script_interpreter(&script.backup_script);
 
                     let start = Instant::now();
 
                     let state;
                     let summary;
                     let body;
-                    match Command::new(tmp.path()).output() {
+                    match Command::new(interpreter)
+                        .arg("-c")
+                        .arg(&script.backup_script)
+                        .output()
+                    {
                         Ok(output) => {
                             if output.status.success() {
                                 log::info!(
@@ -301,13 +302,17 @@ impl Manager for ScriptManager {
                         {
                             log::info!("running post backup script `{}`", action.label);
 
-                            let tmp = write_script(&action.script).unwrap();
+                            let interpreter = script_interpreter(&action.script);
 
                             let start = Instant::now();
 
                             let summary;
                             let body;
-                            match Command::new(tmp.path()).output() {
+                            match Command::new(interpreter)
+                                .arg("-c")
+                                .arg(&action.script)
+                                .output()
+                            {
                                 Ok(output) => {
                                     if output.status.success() {
                                         log::info!(
@@ -433,16 +438,12 @@ fn parse_mounts(mounts: &str) -> HashSet<PathBuf> {
         .collect()
 }
 
-fn write_script(script: &str) -> Result<NamedTempFile, anyhow::Error> {
-    let mut tmp = NamedTempFile::new()?;
-    tmp.write_all(script.as_bytes())?;
-
-    let metadata = tmp.as_file().metadata()?;
-    let mut permissions = metadata.permissions();
-    permissions.set_mode(0o700);
-    tmp.as_file().set_permissions(permissions)?;
-
-    Ok(tmp)
+fn script_interpreter(script: &str) -> &str {
+    script
+        .lines()
+        .find(|line| line.starts_with("#!"))
+        .map(|line| line.trim_start_matches("#!").trim())
+        .unwrap_or("/usr/bin/sh")
 }
 
 fn next_backup(now: DateTime<Utc>, script: &Script) -> DateTime<Utc> {
