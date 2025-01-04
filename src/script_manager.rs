@@ -215,8 +215,8 @@ impl Manager for ScriptManager {
                                 body = format!(
                                     "Backup took {}.\n\n{}\n{}",
                                     humantime::format_duration(run_duration.to_std()?),
-                                    String::from_utf8_lossy(&output.stdout),
-                                    String::from_utf8_lossy(&output.stderr),
+                                    ui_output(&output.stdout),
+                                    ui_output(&output.stderr),
                                 )
                                 .trim()
                                 .to_string();
@@ -332,8 +332,8 @@ impl Manager for ScriptManager {
                                             humantime::format_duration(
                                                 run_duration.to_std().unwrap_or_default()
                                             ),
-                                            String::from_utf8_lossy(&output.stdout),
-                                            String::from_utf8_lossy(&output.stderr),
+                                            ui_output(&output.stdout),
+                                            ui_output(&output.stderr),
                                         )
                                         .trim()
                                         .to_string();
@@ -444,6 +444,14 @@ fn script_interpreter(script: &str) -> &str {
         .find(|line| line.starts_with("#!"))
         .map(|line| line.trim_start_matches("#!").trim())
         .unwrap_or("/usr/bin/sh")
+}
+
+fn ui_output(output: &[u8]) -> String {
+    String::from_utf8_lossy(output)
+        .lines()
+        .filter(|line| line.starts_with("ui: "))
+        .map(|line| line.trim_start_matches("ui: "))
+        .join("\n")
 }
 
 fn next_backup(now: DateTime<Utc>, script: &Script) -> DateTime<Utc> {
