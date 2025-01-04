@@ -17,6 +17,6 @@ jobs:
     - name: Install dependencies
       run: sudo apt install -y libdbus-1-dev pkg-config
     - name: Build
-      run: cargo build --verbose
+      run: cargo build
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test

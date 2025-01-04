@@ -280,12 +280,17 @@ impl Manager for ScriptManager {
                             );
 
                             summary = format!("{} failed", script.name);
-                            body = format!("Backup failed with error:\n\n{error}",);
+                            body = format!("Backup failed with error:\n\n{error}");
                             state = ScriptState::Failed(self.clock.now(), error.to_string());
                         }
                     };
 
                     self.states.insert(script.name.clone(), state);
+
+                    handle.update(TrayData {
+                        tooltip: Some(self.tooltip()),
+                        ..Default::default()
+                    });
 
                     for action in &script.post_backup_actions {
                         notification_handle.action(&action.label, &action.label);

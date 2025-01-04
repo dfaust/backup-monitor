@@ -225,7 +225,7 @@ fn next_wakeup(
     if let Some(next_reminder) = next_reminder_notification {
         if next_wakeup
             .as_ref()
-            .map_or(true, |(ts, _)| *ts > next_reminder)
+            .is_none_or(|(ts, _)| *ts > next_reminder)
         {
             next_wakeup = Some((next_reminder, WakeupReason::ShowReminder));
         }
@@ -234,7 +234,7 @@ fn next_wakeup(
     if let Some(next_ui_update) = next_ui_update {
         if next_wakeup
             .as_ref()
-            .map_or(true, |(ts, _)| *ts > next_ui_update)
+            .is_none_or(|(ts, _)| *ts > next_ui_update)
         {
             next_wakeup = Some((next_ui_update, WakeupReason::UpdateUi));
         }
