@@ -1,7 +1,7 @@
 # Backup Monitor
 
 <p align="center">
-    <img src="screenshot.png" alt="Screenshot of Backup Monitor" width="500" align="center" />
+    <img src="screenshot.png" alt="Screenshot of Backup Monitor" width="440" align="center" />
 </p>
 
 ## About
